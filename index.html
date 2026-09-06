@@ -2,116 +2,201 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>我的課表</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@jaames/iro@5"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root{
+      --bg:#f7f8fc;
+      --card:rgba(255,255,255,.88);
+      --text:#30343b;
+      --muted:#8b919c;
+      --line:#e8eaf0;
+      --accent:#8b9cf6;
+      --accent-soft:#eef0ff;
+      --shadow:0 12px 35px rgba(55,65,81,.08);
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      min-height:100vh;
+      color:var(--text);
+      background:
+        radial-gradient(circle at 10% 0%, rgba(201,211,255,.55), transparent 28%),
+        radial-gradient(circle at 90% 10%, rgba(255,220,231,.5), transparent 25%),
+        var(--bg);
+      font-family:-apple-system,BlinkMacSystemFont,"Noto Sans TC","Microsoft JhengHei",sans-serif;
+    }
+    .page{max-width:1180px;margin:0 auto;padding:38px 20px 60px}
+    .hero{text-align:center;margin-bottom:26px}
+    .hero-badge{display:inline-flex;align-items:center;gap:7px;padding:7px 13px;border-radius:999px;background:rgba(255,255,255,.75);border:1px solid rgba(255,255,255,.9);box-shadow:0 6px 20px rgba(80,90,120,.06);font-size:13px;color:#737a88;margin-bottom:12px}
+    h1{font-size:34px!important;line-height:1.2;margin:0!important;letter-spacing:.02em;color:#2f3440}
+    .subtitle{margin:9px 0 0;color:#9aa0aa;font-size:14px}
+    .card{background:var(--card);border:1px solid rgba(255,255,255,.95);border-radius:22px;box-shadow:var(--shadow);backdrop-filter:blur(12px)}
+    .sync-card{padding:18px 20px;margin-bottom:16px}
+    .sync-row{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+    .status-wrap{display:flex;align-items:center;gap:10px;min-width:0}
+    #authStatus{font-weight:600;color:#505662!important;font-size:14px}
+    #syncStatus{color:#9aa0aa!important;margin-top:7px!important}
+    .status-dot{width:9px;height:9px;border-radius:50%;background:#c6cbd4;box-shadow:0 0 0 4px #f1f2f5;flex:none}
+    .btn{border:0!important;border-radius:12px!important;padding:10px 15px!important;font-size:14px!important;font-weight:600!important;cursor:pointer;transition:.18s ease;box-shadow:none!important}
+    .btn:hover{transform:translateY(-1px);filter:brightness(.98)}
+    .btn-primary{background:#8999ed!important;color:white!important}
+    .btn-secondary{background:#f0f1f5!important;color:#606672!important}
+    .btn-green{background:#93c9af!important;color:white!important}
+    .btn-yellow{background:#e9c779!important;color:white!important}
+    .btn-pink{background:#dda5b9!important;color:white!important}
+    .btn-purple{background:#a59be8!important;color:white!important}
+    .btn-danger{background:#e79a9a!important;color:white!important}
+    .toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+    .toolbar-left,.toolbar-right{display:flex;gap:9px;align-items:center;flex-wrap:wrap}
+    #periodSummary{color:#989eaa!important;margin-left:3px!important}
+    .schedule-card{padding:14px;overflow:hidden}
+    #scheduleContainer{overflow-x:auto;border-radius:15px}
+    #scheduleContainer table{border:0!important;border-collapse:separate!important;border-spacing:5px!important;min-width:760px;background:transparent}
+    #scheduleContainer th{border:0!important;background:#f0f1f7!important;color:#626977;font-weight:700;padding:13px 10px!important;border-radius:11px!important}
+    #scheduleContainer th:first-child{width:105px;background:#e9ebf3!important;color:#727886}
+    #scheduleContainer td{border:0!important;background:#fff!important;border-radius:13px!important;box-shadow:inset 0 0 0 1px #edf0f4;transition:.18s ease;min-height:96px}
+    #scheduleContainer td:first-child{background:#f8f9fb!important;box-shadow:none!important;color:#626976}
+    #scheduleContainer td:hover{transform:translateY(-1px);box-shadow:inset 0 0 0 1px #dfe3ee,0 5px 14px rgba(70,80,100,.06)}
+    #scheduleContainer td:first-child:hover{transform:none;box-shadow:none}
+    #scheduleContainer td > div{line-height:1.5}
+    #scheduleContainer td:not(:first-child) > div > div:first-child{font-weight:700;color:#454b56}
+    #scheduleContainer td:not(:first-child) > div > div:nth-child(2){font-size:12px;color:#727987;margin-top:2px}
+    #scheduleContainer td:not(:first-child) > div > div:nth-child(3){font-size:12px;color:#969ca7}
+
+    .modal-backdrop{background:rgba(35,39,50,.38)!important;backdrop-filter:blur(4px)}
+    .modal-box{border-radius:22px!important;border:1px solid rgba(255,255,255,.9);box-shadow:0 25px 70px rgba(30,35,50,.18);padding:23px!important}
+    .modal-title{color:#373c47}
+    .field{border:1px solid #e4e6ec!important;border-radius:11px!important;padding:10px 12px!important;outline:none;transition:.15s;border-width:1px!important}
+    .field:focus{border-color:#aab5ee!important;box-shadow:0 0 0 3px #eef0ff}
+    label{font-size:13px;color:#777e8a;font-weight:600}
+    .period-row{background:#f8f9fb;border:1px solid #eceef3;border-radius:12px;padding:6px}
+    .period-row input{background:white;border:1px solid #e5e7ec!important;border-radius:9px!important}
+    .remove-period{color:#c5a0a0!important}
+    .add-period{background:#fafaff!important;border-color:#d9dcf0!important;color:#8589a2!important}
+    .modal-actions{border-top:1px solid #f0f1f4;padding-top:14px}
+    .color-preview{border:3px solid white!important;box-shadow:0 2px 10px rgba(50,60,80,.12)}
+    .footer-note{text-align:center;color:#b0b4bd;font-size:12px;margin-top:18px}
+    @media(max-width:640px){
+      .page{padding:25px 12px 45px}
+      h1{font-size:28px!important}
+      .sync-card{padding:15px}
+      .schedule-card{padding:8px}
+      #scheduleContainer table{min-width:700px;border-spacing:4px!important}
+      .toolbar{align-items:stretch}
+      .toolbar-left,.toolbar-right{width:100%}
+      .toolbar .btn{flex:1}
+    }
+  </style>
 </head>
-<body class="p-6 max-w-5xl mx-auto">
-  <h1 class="text-2xl font-bold mb-4 text-center">📅 我的課表</h1>
+<body>
+  <main class="page">
+    <header class="hero">
+      <div class="hero-badge">✨ 我的專屬課表</div>
+      <h1>📅 我的課表</h1>
+      <p class="subtitle">把一週的課程，整理成舒服又清楚的樣子</p>
+    </header>
 
-  <!-- 雲端同步 / 登入 -->
-  <div class="mb-6 p-4 rounded-lg border bg-gray-50">
-    <div class="flex flex-wrap items-center gap-2">
-      <span id="authStatus" class="text-gray-600">☁️ 尚未登入</span>
-      <button id="loginBtn" onclick="loginWithGoogle()" class="bg-blue-600 text-white rounded p-2 hover:bg-blue-700">
-        使用 Google 登入
-      </button>
-      <button id="logoutBtn" onclick="logout()" class="bg-gray-500 text-white rounded p-2 hover:bg-gray-600 hidden">
-        登出
-      </button>
-    </div>
-    <div id="syncStatus" class="text-sm text-gray-500 mt-2">登入後即可跨裝置同步課表</div>
-  </div>
+    <section class="card sync-card">
+      <div class="sync-row">
+        <div class="status-wrap">
+          <span class="status-dot"></span>
+          <div>
+            <div id="authStatus">☁️ 尚未登入</div>
+            <div id="syncStatus" class="text-sm">登入後即可跨裝置同步課表</div>
+          </div>
+        </div>
+        <div class="toolbar-right">
+          <button id="loginBtn" onclick="loginWithGoogle()" class="btn btn-primary">Google 登入</button>
+          <button id="logoutBtn" onclick="logout()" class="btn btn-secondary hidden">登出</button>
+        </div>
+      </div>
+    </section>
 
-  <!-- 節次設定區 -->
-  <div class="mb-6">
-    <button onclick="openPeriodModal()" class="bg-purple-500 text-white rounded p-2 hover:bg-purple-600">
-      ⚙️ 節次設定
-    </button>
-    <span id="periodSummary" class="ml-2 text-sm text-gray-500"></span>
-  </div>
+    <section class="toolbar">
+      <div class="toolbar-left">
+        <button onclick="openPeriodModal()" class="btn btn-purple">⚙️ 節次設定</button>
+        <span id="periodSummary">尚未設定節次</span>
+      </div>
+      <div class="toolbar-right">
+        <button onclick="saveSchedule()" class="btn btn-green">💾 儲存</button>
+        <button onclick="downloadPDF()" class="btn btn-yellow">📄 PDF</button>
+        <button onclick="downloadImage()" class="btn btn-pink">🖼️ 圖片</button>
+      </div>
+    </section>
+
+    <section class="card schedule-card">
+      <div id="scheduleContainer"></div>
+    </section>
+
+    <div class="footer-note">點一下課表格子，就可以新增或編輯課程 ✦</div>
+  </main>
 
   <!-- 節次設定 Modal -->
-  <div id="periodModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-20">
-    <div class="bg-white p-6 rounded-lg w-[95%] max-w-lg max-h-[90vh] overflow-y-auto">
-      <h2 class="text-xl font-bold mb-2">⚙️ 節次設定</h2>
-      <p class="text-sm text-gray-500 mb-4">
-        可以直接輸入節次名稱和時間，順序就是課表顯示順序ㄛ。
-      </p>
+  <div id="periodModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-20 modal-backdrop">
+    <div class="bg-white p-6 rounded-lg w-[95%] max-w-lg max-h-[90vh] overflow-y-auto modal-box">
+      <h2 class="text-xl font-bold mb-2 modal-title">⚙️ 節次設定</h2>
+      <p class="text-sm text-gray-500 mb-4">可以直接輸入節次名稱和時間，順序就是課表顯示順序ㄛ。</p>
       <div id="periodEditor" class="flex flex-col gap-2"></div>
-      <button onclick="addPeriodRow()" class="mt-3 border border-dashed border-gray-400 rounded p-2 w-full hover:bg-gray-50">
-        ＋ 新增節次
-      </button>
-      <div class="flex justify-end gap-2 mt-4">
-        <button onclick="closePeriodModal()" class="bg-gray-400 text-white rounded p-2">取消</button>
-        <button onclick="savePeriodsFromModal()" class="bg-purple-500 text-white rounded p-2 hover:bg-purple-600">
-          儲存節次
-        </button>
+      <button onclick="addPeriodRow()" class="mt-3 border border-dashed border-gray-400 rounded p-2 w-full add-period">＋ 新增節次</button>
+      <div class="flex justify-end gap-2 mt-4 modal-actions">
+        <button onclick="closePeriodModal()" class="btn btn-secondary">取消</button>
+        <button onclick="savePeriodsFromModal()" class="btn btn-purple">儲存節次</button>
       </div>
     </div>
   </div>
 
-  <!-- 功能按鈕 -->
-  <div class="mb-6 flex flex-wrap gap-2">
-    <button onclick="saveSchedule()" class="bg-green-500 text-white rounded p-2 hover:bg-green-600">💾 存檔</button>
-    <button onclick="downloadPDF()" class="bg-yellow-500 text-white rounded p-2 hover:bg-yellow-600">📥 下載 PDF</button>
-    <button onclick="downloadImage()" class="bg-pink-500 text-white rounded p-2 hover:bg-pink-600">📸 存相簿圖片</button>
-  </div>
-
-  <!-- 課表顯示 -->
-  <div id="scheduleContainer" class="overflow-x-auto"></div>
-
   <!-- 新增/編輯課程 Modal -->
-  <div id="courseModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-20">
-    <div class="bg-white p-6 rounded-lg w-96">
-      <h2 class="text-xl font-bold mb-4" id="modalTitle">新增課程</h2>
-      <div class="flex flex-col gap-2">
-        <input id="courseEmoji" type="text" placeholder="Emoji (例如 📘)" class="border p-2 rounded w-full" />
-        <input id="courseName" type="text" placeholder="課程名稱" class="border p-2 rounded w-full" />
-        <input id="courseTeacher" type="text" placeholder="授課教師" class="border p-2 rounded w-full" />
-        <input id="courseLocation" type="text" placeholder="教室地點" class="border p-2 rounded w-full" />
+  <div id="courseModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-20 modal-backdrop">
+    <div class="bg-white p-6 rounded-lg w-96 modal-box">
+      <h2 class="text-xl font-bold mb-4 modal-title" id="modalTitle">新增課程</h2>
+      <div class="flex flex-col gap-3">
+        <input id="courseEmoji" type="text" placeholder="Emoji，例如 📘" class="field w-full" />
+        <input id="courseName" type="text" placeholder="課程名稱" class="field w-full" />
+        <input id="courseTeacher" type="text" placeholder="授課教師" class="field w-full" />
+        <input id="courseLocation" type="text" placeholder="教室地點" class="field w-full" />
 
         <label>星期
-          <select id="courseDay" class="border p-2 rounded w-full"></select>
+          <select id="courseDay" class="field w-full"></select>
         </label>
         <label>開始節次
-          <select id="courseStart" class="border p-2 rounded w-full"></select>
+          <select id="courseStart" class="field w-full"></select>
         </label>
         <label>結束節次
-          <select id="courseEnd" class="border p-2 rounded w-full"></select>
+          <select id="courseEnd" class="field w-full"></select>
         </label>
 
-        <!-- 顏色選擇器 -->
         <div>
-          <label class="block mb-1">課程顏色</label>
-          <div id="colorPreview" class="w-10 h-10 border rounded cursor-pointer" style="background:#a0e7e5"></div>
-          <input id="colorHex" type="text" class="border p-2 rounded w-full mt-2" />
-          <div id="recentColors" class="flex gap-1 mt-2"></div>
+          <label class="block mb-2">課程顏色</label>
+          <div id="colorPreview" class="w-10 h-10 rounded-xl cursor-pointer color-preview" style="background:#a0e7e5"></div>
+          <input id="colorHex" type="text" class="field w-full mt-2" placeholder="#A0E7E5" />
+          <div id="recentColors" class="flex gap-2 mt-2"></div>
         </div>
       </div>
 
-      <div class="flex justify-end gap-2 mt-4">
-        <button onclick="closeModal()" class="bg-gray-400 text-white rounded p-2">取消</button>
-        <button id="deleteBtn" onclick="deleteCourseInModal()" class="bg-red-500 text-white rounded p-2 hidden">刪除</button>
-        <button onclick="saveCourse()" class="bg-blue-500 text-white rounded p-2 hover:bg-blue-600">確認</button>
+      <div class="flex justify-end gap-2 mt-5 modal-actions">
+        <button onclick="closeModal()" class="btn btn-secondary">取消</button>
+        <button id="deleteBtn" onclick="deleteCourseInModal()" class="btn btn-danger hidden">刪除</button>
+        <button onclick="saveCourse()" class="btn btn-primary">確認</button>
       </div>
     </div>
   </div>
 
   <!-- 顏色挑選器彈窗 -->
-  <div id="colorModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-30">
-    <div class="bg-white p-4 rounded-lg">
+  <div id="colorModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-30 modal-backdrop">
+    <div class="bg-white p-4 rounded-lg modal-box">
       <div id="colorPicker"></div>
       <div class="flex justify-end mt-4">
-        <button onclick="closeColorModal()" class="bg-blue-500 text-white px-4 py-2 rounded">完成</button>
+        <button onclick="closeColorModal()" class="btn btn-primary">完成</button>
       </div>
     </div>
   </div>
 
-<script src="./app.js"></script>
-
+  <script src="./app.js"></script>
 </body>
 </html>
