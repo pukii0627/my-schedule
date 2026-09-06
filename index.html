@@ -62,12 +62,16 @@
     #scheduleContainer th:first-child{width:105px;background:#e9ebf3!important;color:#727886}
     #scheduleContainer td{border:0!important;background:transparent!important;border-radius:13px!important;box-shadow:none!important;transition:.18s ease;min-height:96px;padding:0!important;vertical-align:middle!important}
     #scheduleContainer td:first-child{background:#f8f9fb!important;box-shadow:none!important;color:#626976}
+    #scheduleContainer td.course-cell{background:var(--course-color)!important;border-radius:13px!important;overflow:hidden}
+    #scheduleContainer td.course-cell:hover{filter:brightness(.98)}
     #scheduleContainer td:hover{transform:translateY(-1px);box-shadow:none!important}
     #scheduleContainer td:first-child:hover{transform:none;box-shadow:none!important}
     #scheduleContainer td > div{line-height:1.5;width:100%;height:100%;display:flex;align-items:center;justify-content:center}
+    #scheduleContainer td:first-child > div{flex-direction:column;gap:6px;text-align:center}
+    #scheduleContainer td.course-cell > div{flex-direction:column;gap:3px;text-align:center;padding:8px!important;overflow:hidden}
     #scheduleContainer td:not(:first-child) > div > div:first-child{font-weight:700;color:#454b56}
-    #scheduleContainer td:not(:first-child) > div > div:nth-child(2){font-size:12px;color:#727987;margin-top:2px}
-    #scheduleContainer td:not(:first-child) > div > div:nth-child(3){font-size:12px;color:#969ca7}
+    #scheduleContainer td:not(:first-child) > div > div:nth-child(2){font-size:12px;color:#727987;margin-top:0}
+    #scheduleContainer td:not(:first-child) > div > div:nth-child(3){font-size:12px;color:#969ca7;margin-top:0}
 
     .modal-backdrop{background:rgba(35,39,50,.38)!important;backdrop-filter:blur(4px)}
     .modal-box{border-radius:22px!important;border:1px solid rgba(255,255,255,.9);box-shadow:0 25px 70px rgba(30,35,50,.18);padding:23px!important;max-height:calc(100vh - 32px);overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
@@ -194,6 +198,8 @@
       #scheduleContainer td{height:82px;min-height:82px;border-radius:10px!important}
       #scheduleContainer td:first-child{width:72px;min-width:72px;position:sticky;left:0;z-index:1;background:#f8f9fb!important;box-shadow:3px 0 8px rgba(70,80,100,.07)!important}
       #scheduleContainer td > div{padding:3px!important;line-height:1.35}
+      #scheduleContainer td:first-child > div{gap:4px}
+      #scheduleContainer td.course-cell > div{gap:2px;padding:5px!important}
       #scheduleContainer td:not(:first-child) > div > div:first-child{font-size:12px}
       #scheduleContainer td:not(:first-child) > div > div:nth-child(2),
       #scheduleContainer td:not(:first-child) > div > div:nth-child(3){font-size:10px;margin-top:1px}
