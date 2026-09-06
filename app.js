@@ -438,9 +438,31 @@ const days = ["一","二","三","四","五"];
     }
   });
 
-  async function downloadPDF(){
+  // 匯出時直接抓「完整課表 table」，避免手機版的左右滑動容器只截到目前畫面
+  async function captureFullSchedule(){
     const container=document.getElementById('scheduleContainer');
-    const canvas=await html2canvas(container);
+    const table=container.querySelector('table');
+    if(!table) throw new Error('找不到課表');
+
+    const rect=table.getBoundingClientRect();
+    const width=Math.max(table.scrollWidth, table.offsetWidth, Math.ceil(rect.width));
+    const height=Math.max(table.scrollHeight, table.offsetHeight, Math.ceil(rect.height));
+
+    return await html2canvas(table,{
+      backgroundColor:'#ffffff',
+      useCORS:true,
+      scale:Math.min(window.devicePixelRatio || 2, 2),
+      width,
+      height,
+      windowWidth:width,
+      windowHeight:height,
+      scrollX:0,
+      scrollY:0
+    });
+  }
+
+  async function downloadPDF(){
+    const canvas=await captureFullSchedule();
     const imgData=canvas.toDataURL('image/png');
     const { jsPDF }=window.jspdf;
     const pdf=new jsPDF('l','pt','a4');
@@ -452,12 +474,11 @@ const days = ["一","二","三","四","五"];
   }
 
   async function downloadImage(){
-    const container=document.getElementById('scheduleContainer');
-    const canvas=await html2canvas(container);
+    const canvas=await captureFullSchedule();
     const imgData=canvas.toDataURL('image/png');
     const link=document.createElement('a');
     link.href=imgData;
-    link.download='我的課表.png';
+    link.download='我的完整課表.png';
     link.click();
   }
 
