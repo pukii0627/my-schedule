@@ -126,7 +126,7 @@ const days = ["一","二","三","四","五"];
       days.forEach(day=>{
         const td=document.createElement('td');
         td.className='align-middle h-24 cursor-pointer';
-        td.style.backgroundColor = 'transparent';
+        td.style.setProperty('background-color', '#ffffff', 'important');
 
         const course = courses.find(c =>
           c.day === day &&
@@ -137,6 +137,7 @@ const days = ["一","二","三","四","五"];
         if(course){
           td.classList.add('course-cell');
           td.style.setProperty('--course-color', course.color || '#a0e7e5');
+          td.style.setProperty('background-color', course.color || '#a0e7e5', 'important');
           td.innerHTML=`<div class='flex flex-col items-center justify-center h-full text-center'>
             <div>${course.emoji} ${course.name}</div>
             <div>${course.teacher}</div>
