@@ -2,6 +2,7 @@ const days = ["一","二","三","四","五"];
   let periods = [];
   let times = [];
   let courses = [];
+  let scheduleBackground = "#ffffff";
   let editCourseIndex = null;
   let colorPicker, recentColors = [];
 
@@ -95,6 +96,7 @@ const days = ["一","二","三","四","五"];
   function renderTable(){
     const container = document.getElementById('scheduleContainer');
     container.innerHTML='';
+    container.style.backgroundColor = scheduleBackground || "#ffffff";
     const table=document.createElement('table');
     table.className='table-fixed border-collapse border border-gray-400 w-full text-center';
 
@@ -123,7 +125,8 @@ const days = ["一","二","三","四","五"];
 
       days.forEach(day=>{
         const td=document.createElement('td');
-        td.className='border border-gray-400 align-middle h-24 cursor-pointer';
+        td.className='align-middle h-24 cursor-pointer';
+        td.style.backgroundColor = 'transparent';
 
         const course = courses.find(c =>
           c.day === day &&
@@ -132,7 +135,7 @@ const days = ["一","二","三","四","五"];
         );
 
         if(course){
-          td.style.backgroundColor=course.color;
+          td.style.backgroundColor=course.color || '#a0e7e5';
           td.innerHTML=`<div class='flex flex-col items-center justify-center h-full text-center'>
             <div>${course.emoji} ${course.name}</div>
             <div>${course.teacher}</div>
@@ -304,7 +307,8 @@ const days = ["一","二","三","四","五"];
     return {
       periods: periods || [],
       times: times || [],
-      courses: courses || []
+      courses: courses || [],
+      background: scheduleBackground || '#ffffff'
     };
   }
 
@@ -312,6 +316,7 @@ const days = ["一","二","三","四","五"];
     periods = Array.isArray(data?.periods) ? data.periods : [];
     times = Array.isArray(data?.times) ? data.times : [];
     courses = Array.isArray(data?.courses) ? data.courses : [];
+    scheduleBackground = typeof data?.background === 'string' ? data.background : '#ffffff';
     renderTable();
     renderPeriodSummary();
 
@@ -337,6 +342,7 @@ const days = ["一","二","三","四","五"];
         periods: localData.periods,
         times: localData.times,
         courses: localData.courses,
+        background: localData.background,
         updated_at: new Date().toISOString()
       }, { onConflict: "user_id" });
 
@@ -388,7 +394,7 @@ const days = ["一","二","三","四","五"];
 
     const { data, error } = await supabaseClient
       .from("schedules")
-      .select("periods,times,courses")
+      .select("periods,times,courses,background")
       .eq("user_id", currentUser.id)
       .maybeSingle();
 
@@ -438,48 +444,201 @@ const days = ["一","二","三","四","五"];
     }
   });
 
-  // 匯出時直接抓「完整課表 table」，避免手機版的左右滑動容器只截到目前畫面
+  // =========================
+  // 匯出完整課表
+  // =========================
+  // 不再直接截取原本的 HTML table。
+  // 原本在部分筆電瀏覽器 / html2canvas 組合下，長表格底部可能出現
+  // 橫向斷層或被裁切。這裡改成「依課表資料直接繪製 Canvas」，
+  // 因此與螢幕寬度、左右捲動、sticky、overflow 都無關。
+  function roundRectPath(ctx,x,y,w,h,r){
+    const rr=Math.min(r,w/2,h/2);
+    ctx.beginPath();
+    ctx.moveTo(x+rr,y);
+    ctx.arcTo(x+w,y,x+w,y+h,rr);
+    ctx.arcTo(x+w,y+h,x,y+h,rr);
+    ctx.arcTo(x,y+h,x,y,rr);
+    ctx.arcTo(x,y,x+w,y,rr);
+    ctx.closePath();
+  }
+
+  function fitCanvasText(ctx,text,maxWidth,fontSize,weight='400'){
+    let size=fontSize;
+    ctx.font=`${weight} ${size}px -apple-system, BlinkMacSystemFont, "Noto Sans TC", "Microsoft JhengHei", sans-serif`;
+    while(size>9 && ctx.measureText(text).width>maxWidth){
+      size-=1;
+      ctx.font=`${weight} ${size}px -apple-system, BlinkMacSystemFont, "Noto Sans TC", "Microsoft JhengHei", sans-serif`;
+    }
+    return size;
+  }
+
+  function drawCenteredText(ctx,text,x,y,maxWidth,fontSize,weight='400',color='#626977'){
+    text=String(text ?? '');
+    const size=fitCanvasText(ctx,text,maxWidth,fontSize,weight);
+    ctx.font=`${weight} ${size}px -apple-system, BlinkMacSystemFont, "Noto Sans TC", "Microsoft JhengHei", sans-serif`;
+    ctx.fillStyle=color;
+    ctx.textAlign='center';
+    ctx.textBaseline='middle';
+    ctx.fillText(text,x,y);
+  }
+
   async function captureFullSchedule(){
-    const container=document.getElementById('scheduleContainer');
-    const table=container.querySelector('table');
-    if(!table) throw new Error('找不到課表');
+    if(!periods.length) throw new Error('找不到課表');
 
-    const rect=table.getBoundingClientRect();
-    const width=Math.max(table.scrollWidth, table.offsetWidth, Math.ceil(rect.width));
-    const height=Math.max(table.scrollHeight, table.offsetHeight, Math.ceil(rect.height));
+    // 以目前桌面版課表的比例為基準，手機也一樣輸出完整的一～五。
+    const exportWidth=Math.max(1100, Math.min(1400, window.innerWidth >= 900 ? window.innerWidth - 40 : 1100));
+    const gap=5;
+    const outerPad=4;
+    const firstCol=110;
+    const dayCol=(exportWidth - outerPad*2 - gap*5 - firstCol)/5;
+    const headerH=58;
+    const rowH=104;
+    const height=outerPad*2 + headerH + periods.length*(rowH+gap);
+    const dpr=Math.min(window.devicePixelRatio || 2, 2);
 
-    return await html2canvas(table,{
-      backgroundColor:'#ffffff',
-      useCORS:true,
-      scale:Math.min(window.devicePixelRatio || 2, 2),
-      width,
-      height,
-      windowWidth:width,
-      windowHeight:height,
-      scrollX:0,
-      scrollY:0
+    const canvas=document.createElement('canvas');
+    canvas.width=Math.ceil(exportWidth*dpr);
+    canvas.height=Math.ceil(height*dpr);
+    canvas.style.width=exportWidth+'px';
+    canvas.style.height=height+'px';
+
+    const ctx=canvas.getContext('2d');
+    ctx.scale(dpr,dpr);
+    ctx.fillStyle=scheduleBackground || '#ffffff';
+    ctx.fillRect(0,0,exportWidth,height);
+
+    // 表頭
+    const headerY=outerPad;
+    const headerColor='#f0f1f7';
+    const firstHeaderColor='#e9ebf3';
+    roundRectPath(ctx,outerPad,headerY,firstCol,headerH,12);
+    ctx.fillStyle=firstHeaderColor;
+    ctx.fill();
+    drawCenteredText(ctx,'節次/時間',outerPad+firstCol/2,headerY+headerH/2,firstCol-16,18,'700','#727886');
+
+    days.forEach((day,j)=>{
+      const x=outerPad+firstCol+gap+j*(dayCol+gap);
+      roundRectPath(ctx,x,headerY,dayCol,headerH,12);
+      ctx.fillStyle=headerColor;
+      ctx.fill();
+      drawCenteredText(ctx,`星期${day}`,x+dayCol/2,headerY+headerH/2,dayCol-20,18,'700','#626977');
     });
+
+    periods.forEach((period,i)=>{
+      const y=outerPad+headerH+gap+i*(rowH+gap);
+      const time=times[i] || '';
+
+      // 節次欄
+      roundRectPath(ctx,outerPad,y,firstCol,rowH,13);
+      ctx.fillStyle='#f8f9fb';
+      ctx.fill();
+      drawCenteredText(ctx,period,outerPad+firstCol/2,y+rowH/2-10,firstCol-12,16,'700','#626976');
+      drawCenteredText(ctx,time,outerPad+firstCol/2,y+rowH/2+18,firstCol-12,15,'400','#6d7583');
+
+      days.forEach((day,j)=>{
+        const x=outerPad+firstCol+gap+j*(dayCol+gap);
+        const course=courses.find(c =>
+          c.day===day &&
+          periods.indexOf(period)>=periods.indexOf(c.startPeriod) &&
+          periods.indexOf(period)<=periods.indexOf(c.endPeriod)
+        );
+
+        roundRectPath(ctx,x,y,dayCol,rowH,13);
+        ctx.fillStyle=course?.color || '#ffffff';
+        ctx.fill();
+        // 課程／空白格都只保留圓角色塊，不再畫灰色外框。
+        ctx.strokeStyle='transparent';
+        ctx.lineWidth=0;
+        ctx.stroke();
+
+        if(course){
+          const centerX=x+dayCol/2;
+          const maxText=dayCol-28;
+          drawCenteredText(ctx,`${course.emoji || ''} ${course.name || ''}`.trim(),centerX,y+rowH/2-19,maxText,17,'700','#454b56');
+          drawCenteredText(ctx,course.teacher || '',centerX,y+rowH/2+7,maxText,14,'400','#727987');
+          drawCenteredText(ctx,course.location || '',centerX,y+rowH/2+29,maxText,14,'400','#969ca7');
+        }
+      });
+    });
+
+    return canvas;
   }
 
   async function downloadPDF(){
-    const canvas=await captureFullSchedule();
-    const imgData=canvas.toDataURL('image/png');
-    const { jsPDF }=window.jspdf;
-    const pdf=new jsPDF('l','pt','a4');
-    const imgProps=pdf.getImageProperties(imgData);
-    const pdfWidth=pdf.internal.pageSize.getWidth();
-    const pdfHeight=(imgProps.height*pdfWidth)/imgProps.width;
-    pdf.addImage(imgData,'PNG',0,0,pdfWidth,pdfHeight);
-    pdf.save('我的課表.pdf');
+    try{
+      const canvas=await captureFullSchedule();
+      const imgData=canvas.toDataURL('image/png');
+      const { jsPDF }=window.jspdf;
+      const pdf=new jsPDF('l','pt','a4');
+      const imgProps=pdf.getImageProperties(imgData);
+      const pageWidth=pdf.internal.pageSize.getWidth();
+      const pageHeight=pdf.internal.pageSize.getHeight();
+      const scale=Math.min((pageWidth-24)/imgProps.width,(pageHeight-24)/imgProps.height);
+      const pdfWidth=imgProps.width*scale;
+      const pdfHeight=imgProps.height*scale;
+      const x=(pageWidth-pdfWidth)/2;
+      const y=(pageHeight-pdfHeight)/2;
+      pdf.addImage(imgData,'PNG',x,y,pdfWidth,pdfHeight);
+      pdf.save('我的課表.pdf');
+    }catch(e){
+      console.error(e);
+      alert('匯出 PDF 時發生問題，請再試一次。');
+    }
   }
 
   async function downloadImage(){
-    const canvas=await captureFullSchedule();
-    const imgData=canvas.toDataURL('image/png');
-    const link=document.createElement('a');
-    link.href=imgData;
-    link.download='我的完整課表.png';
-    link.click();
+    try{
+      const canvas=await captureFullSchedule();
+      const imgData=canvas.toDataURL('image/png');
+      const link=document.createElement('a');
+      link.href=imgData;
+      link.download='我的完整課表.png';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    }catch(e){
+      console.error(e);
+      alert('儲存圖片時發生問題，請再試一次。');
+    }
+  }
+
+  // =========================
+  // 課表背景設定
+  // =========================
+  function openBackgroundModal(){
+    const modal=document.getElementById("backgroundModal");
+    const input=document.getElementById("backgroundColor");
+    const hex=document.getElementById("backgroundHex");
+    input.value = /^#[0-9a-fA-F]{6}$/.test(scheduleBackground) ? scheduleBackground : "#ffffff";
+    hex.value = input.value;
+    document.getElementById("backgroundPreview").style.backgroundColor=input.value;
+    modal.classList.remove("hidden");
+  }
+
+  function closeBackgroundModal(){
+    document.getElementById("backgroundModal").classList.add("hidden");
+  }
+
+  function setBackgroundColor(color){
+    if(!/^#[0-9a-fA-F]{6}$/.test(color)) return;
+    scheduleBackground=color;
+    document.getElementById("backgroundColor").value=color;
+    document.getElementById("backgroundHex").value=color;
+    document.getElementById("backgroundPreview").style.backgroundColor=color;
+    renderTable();
+    autoSave();
+  }
+
+  function saveBackground(){
+    const color=document.getElementById("backgroundHex").value.trim();
+    if(!/^#[0-9a-fA-F]{6}$/.test(color)){
+      alert("請輸入正確的 HEX 顏色，例如 #F7F8FC");
+      return;
+    }
+    scheduleBackground=color;
+    closeBackgroundModal();
+    renderTable();
+    autoSave();
   }
 
   // 顏色選擇器控制
@@ -511,6 +670,16 @@ const days = ["一","二","三","四","五"];
       try{colorPicker.color.set(e.target.value);}catch{}
     });
     document.getElementById("colorPreview").addEventListener("click",openColorModal);
+    document.getElementById("backgroundColor").addEventListener("input",e=>{
+      document.getElementById("backgroundHex").value=e.target.value;
+    });
+    document.getElementById("backgroundHex").addEventListener("input",e=>{
+      const v=e.target.value.trim();
+      if(/^#[0-9a-fA-F]{6}$/.test(v)){
+        document.getElementById("backgroundColor").value=v;
+        document.getElementById("backgroundPreview").style.backgroundColor=v;
+      }
+    });
     loadSchedule();
   };
 
