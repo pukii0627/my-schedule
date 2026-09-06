@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <title>我的課表</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@jaames/iro@5"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="p-6 max-w-5xl mx-auto">
+  <h1 class="text-2xl font-bold mb-4 text-center">📅 我的課表</h1>
+
+  <!-- 雲端同步 / 登入 -->
+  <div class="mb-6 p-4 rounded-lg border bg-gray-50">
+    <div class="flex flex-wrap items-center gap-2">
+      <span id="authStatus" class="text-gray-600">☁️ 尚未登入</span>
+      <button id="loginBtn" onclick="loginWithGoogle()" class="bg-blue-600 text-white rounded p-2 hover:bg-blue-700">
+        使用 Google 登入
+      </button>
+      <button id="logoutBtn" onclick="logout()" class="bg-gray-500 text-white rounded p-2 hover:bg-gray-600 hidden">
+        登出
+      </button>
+    </div>
+    <div id="syncStatus" class="text-sm text-gray-500 mt-2">登入後即可跨裝置同步課表</div>
+  </div>
+
+  <!-- 節次與時間設定區 -->
+  <div class="mb-6 flex flex-col gap-2">
+    <label>節數 <input id="numPeriods" type="number" value="9" min="1" class="border p-2 rounded w-full"/></label>
+    <label>每節時間（每行一節，格式 8:10-8:50）
+      <textarea id="periodTimes" class="border p-2 rounded w-full h-32">
+08:10-08:50
+09:10-09:50
+10:10-10:50
+11:10-12:00
+吃飯
+12:50-13:40
+13:50-14:40
+14:50-15:40
+15:50-16:40</textarea>
+    </label>
+    <button onclick="generatePeriods()" class="bg-purple-500 text-white rounded p-2 hover:bg-purple-600">生成節次</button>
+  </div>
+
+  <!-- 功能按鈕 -->
+  <div class="mb-6 flex flex-wrap gap-2">
+    <button onclick="saveSchedule()" class="bg-green-500 text-white rounded p-2 hover:bg-green-600">💾 存檔</button>
+    <button onclick="downloadPDF()" class="bg-yellow-500 text-white rounded p-2 hover:bg-yellow-600">📥 下載 PDF</button>
+    <button onclick="downloadImage()" class="bg-pink-500 text-white rounded p-2 hover:bg-pink-600">📸 存相簿圖片</button>
+  </div>
+
+  <!-- 課表顯示 -->
+  <div id="scheduleContainer" class="overflow-x-auto"></div>
+
+  <!-- 新增/編輯課程 Modal -->
+  <div id="courseModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-20">
+    <div class="bg-white p-6 rounded-lg w-96">
+      <h2 class="text-xl font-bold mb-4" id="modalTitle">新增課程</h2>
+      <div class="flex flex-col gap-2">
+        <input id="courseEmoji" type="text" placeholder="Emoji (例如 📘)" class="border p-2 rounded w-full" />
+        <input id="courseName" type="text" placeholder="課程名稱" class="border p-2 rounded w-full" />
+        <input id="courseTeacher" type="text" placeholder="授課教師" class="border p-2 rounded w-full" />
+        <input id="courseLocation" type="text" placeholder="教室地點" class="border p-2 rounded w-full" />
+
+        <label>星期
+          <select id="courseDay" class="border p-2 rounded w-full"></select>
+        </label>
+        <label>開始節次
+          <select id="courseStart" class="border p-2 rounded w-full"></select>
+        </label>
+        <label>結束節次
+          <select id="courseEnd" class="border p-2 rounded w-full"></select>
+        </label>
+
+        <!-- 顏色選擇器 -->
+        <div>
+          <label class="block mb-1">課程顏色</label>
+          <div id="colorPreview" class="w-10 h-10 border rounded cursor-pointer" style="background:#a0e7e5"></div>
+          <input id="colorHex" type="text" class="border p-2 rounded w-full mt-2" />
+          <div id="recentColors" class="flex gap-1 mt-2"></div>
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-2 mt-4">
+        <button onclick="closeModal()" class="bg-gray-400 text-white rounded p-2">取消</button>
+        <button id="deleteBtn" onclick="deleteCourseInModal()" class="bg-red-500 text-white rounded p-2 hidden">刪除</button>
+        <button onclick="saveCourse()" class="bg-blue-500 text-white rounded p-2 hover:bg-blue-600">確認</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 顏色挑選器彈窗 -->
+  <div id="colorModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-30">
+    <div class="bg-white p-4 rounded-lg">
+      <div id="colorPicker"></div>
+      <div class="flex justify-end mt-4">
+        <button onclick="closeColorModal()" class="bg-blue-500 text-white px-4 py-2 rounded">完成</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const days = ["一","二","三","四","五"];
+  let periods = [];
+  let times = [];
+  let courses = [];
+  let editCourseIndex = null;
+  let colorPicker, recentColors = [];
+
+  function generatePeriods(){
+  const timesInput = document.getElementById('periodTimes').value.split('\n');
+
+  periods = [];
+  times = [];
+
+  timesInput.forEach(line => {
+    const trimmed = line.trim();
+    if(!trimmed) return;
+
+    // 假設格式是：節次 空格 時間
+    // 例如：20 11:40-12:00
+    const parts = trimmed.split(/\s+/);
+
+    if(parts.length >= 2){
+      const periodLabel = `第${parts[0]}節`;
+      const timeLabel = parts.slice(1).join(' ');
+
+      periods.push(periodLabel);
+      times.push(timeLabel);
+    }
+  });
+
+  renderTable();
+  autoSave();
+}
+
+  function renderTable(){
+    const container = document.getElementById('scheduleContainer');
+    container.innerHTML='';
+    const table=document.createElement('table');
+    table.className='table-fixed border-collapse border border-gray-400 w-full text-center';
+
+    // 表頭
+    const thead=document.createElement('thead');
+    let headRow=document.createElement('tr');
+    headRow.innerHTML='<th class="border border-gray-400 p-2 w-24">節次/時間</th>';
+    days.forEach(day=>{
+      const th=document.createElement('th');
+      th.className='border border-gray-400 p-2';
+      th.textContent=`星期${day}`;
+      headRow.appendChild(th);
+    });
+    thead.appendChild(headRow);
+    table.appendChild(thead);
+
+    // 內容
+    const tbody=document.createElement('tbody');
+    periods.forEach((period,i)=>{
+      const row=document.createElement('tr');
+      const time=times[i];
+      const firstCell=document.createElement('td');
+      firstCell.className='border border-gray-400 p-2';
+      firstCell.innerHTML=`<div class='font-bold'>${period}</div><div>${time}</div>`;
+      row.appendChild(firstCell);
+
+      days.forEach(day=>{
+        const td=document.createElement('td');
+        td.className='border border-gray-400 align-middle h-24 cursor-pointer';
+
+        const course = courses.find(c =>
+          c.day === day &&
+          periods.indexOf(period) >= periods.indexOf(c.startPeriod) &&
+          periods.indexOf(period) <= periods.indexOf(c.endPeriod)
+        );
+
+        if(course){
+          td.style.backgroundColor=course.color;
+          td.innerHTML=`<div class='flex flex-col items-center justify-center h-full text-center'>
+            <div>${course.emoji} ${course.name}</div>
+            <div>${course.teacher}</div>
+            <div>${course.location}</div>
+          </div>`;
+        }
+
+        td.onclick = () => {
+          if(course){
+            editCourseIndex = courses.indexOf(course);
+            document.getElementById("deleteBtn").classList.remove("hidden");
+            openModal(course.day, course.startPeriod, course);
+          } else {
+            editCourseIndex = null;
+            document.getElementById("deleteBtn").classList.add("hidden");
+            openModal(day, period);
+          }
+        };
+
+        row.appendChild(td);
+      });
+      tbody.appendChild(row);
+    });
+    table.appendChild(tbody);
+    container.appendChild(table);
+
+    const daySelect=document.getElementById('courseDay');
+    const startSelect=document.getElementById('courseStart');
+    const endSelect=document.getElementById('courseEnd');
+    daySelect.innerHTML='';
+    startSelect.innerHTML='';
+    endSelect.innerHTML='';
+    days.forEach(day=>{ const opt=document.createElement('option'); opt.textContent=day; daySelect.appendChild(opt); });
+    periods.forEach(p=>{
+      let opt1=document.createElement('option'); opt1.textContent=p; startSelect.appendChild(opt1);
+      let opt2=document.createElement('option'); opt2.textContent=p; endSelect.appendChild(opt2);
+    });
+  }
+
+  function openModal(day, period, course=null){
+    document.getElementById('courseModal').classList.remove('hidden');
+    document.getElementById('modalTitle').textContent = course ? "編輯課程" : "新增課程";
+
+    if(course){
+      document.getElementById('courseEmoji').value=course.emoji;
+      document.getElementById('courseName').value=course.name;
+      document.getElementById('courseTeacher').value=course.teacher;
+      document.getElementById('courseLocation').value=course.location;
+      document.getElementById('courseDay').value=course.day;
+      document.getElementById('courseStart').value=course.startPeriod;
+      document.getElementById('courseEnd').value=course.endPeriod;
+      document.getElementById('colorPreview').style.background=course.color;
+      document.getElementById('colorHex').value=course.color;
+    } else {
+      document.getElementById('courseEmoji').value='';
+      document.getElementById('courseName').value='';
+      document.getElementById('courseTeacher').value='';
+      document.getElementById('courseLocation').value='';
+      document.getElementById('courseDay').value=day;
+      document.getElementById('courseStart').value=period;
+      document.getElementById('courseEnd').value=period;
+      const randColor=getRandomColor();
+      document.getElementById('colorPreview').style.background=randColor;
+      document.getElementById('colorHex').value=randColor;
+    }
+  }
+
+  function closeModal(){
+    document.getElementById('courseModal').classList.add('hidden');
+  }
+
+  function saveCourse(){
+    const emoji=document.getElementById('courseEmoji').value.trim();
+    const name=document.getElementById('courseName').value.trim();
+    const teacher=document.getElementById('courseTeacher').value.trim();
+    const location=document.getElementById('courseLocation').value.trim();
+    const day=document.getElementById('courseDay').value;
+    const start=document.getElementById('courseStart').value;
+    const end=document.getElementById('courseEnd').value;
+    const color=document.getElementById('colorHex').value;
+
+    if(!name) return;
+
+    const courseData={emoji,name,teacher,location,day,startPeriod:start,endPeriod:end,color};
+
+    if(editCourseIndex!==null){
+      courses[editCourseIndex]=courseData;
+    } else {
+      courses.push(courseData);
+    }
+
+    addRecentColor(color);
+    closeModal();
+    renderTable();
+    autoSave();
+  }
+
+  function deleteCourseInModal(){
+    if(editCourseIndex!==null){
+      courses.splice(editCourseIndex,1);
+      editCourseIndex=null;
+      closeModal();
+      renderTable();
+      autoSave();
+    }
+  }
+
+  // =========================
+  // Supabase 雲端同步設定
+  // =========================
+  const SUPABASE_URL = "https://vktuigxxlciclhvpxdjj.supabase.co";
+  const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_mFPESpcqb220DML18yLeYw_HrRXeuqg";
+  const supabaseClient = window.supabase.createClient(
+    SUPABASE_URL,
+    SUPABASE_PUBLISHABLE_KEY
+  );
+
+  let currentUser = null;
+  let saveTimer = null;
+
+  function setSyncStatus(message, isError=false){
+    const el = document.getElementById("syncStatus");
+    el.textContent = message;
+    el.className = "text-sm mt-2 " + (isError ? "text-red-500" : "text-gray-500");
+  }
+
+  function updateAuthUI(){
+    const status = document.getElementById("authStatus");
+    const login = document.getElementById("loginBtn");
+    const logoutBtn = document.getElementById("logoutBtn");
+
+    if(currentUser){
+      status.textContent = "☁️ 已登入：" + (currentUser.email || "Google 帳號");
+      login.classList.add("hidden");
+      logoutBtn.classList.remove("hidden");
+    }else{
+      status.textContent = "☁️ 尚未登入";
+      login.classList.remove("hidden");
+      logoutBtn.classList.add("hidden");
+    }
+  }
+
+  async function loginWithGoogle(){
+    setSyncStatus("正在開啟 Google 登入...");
+    const { error } = await supabaseClient.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: window.location.origin + window.location.pathname
+      }
+    });
+    if(error){
+      console.error(error);
+      setSyncStatus("登入失敗：" + error.message, true);
+    }
+  }
+
+  async function logout(){
+    const { error } = await supabaseClient.auth.signOut();
+    if(error){
+      setSyncStatus("登出失敗：" + error.message, true);
+      return;
+    }
+    currentUser = null;
+    updateAuthUI();
+    setSyncStatus("已登出。");
+  }
+
+  function getScheduleData(){
+    return {
+      periods: periods || [],
+      times: times || [],
+      courses: courses || []
+    };
+  }
+
+  function applyScheduleData(data){
+    periods = Array.isArray(data?.periods) ? data.periods : [];
+    times = Array.isArray(data?.times) ? data.times : [];
+    courses = Array.isArray(data?.courses) ? data.courses : [];
+    renderTable();
+
+    // 同步更新設定輸入框
+    document.getElementById("numPeriods").value = periods.length || 9;
+    document.getElementById("periodTimes").value = times.join("\n");
+  }
+
+  async function saveSchedule(showAlert=true){
+    const localData = getScheduleData();
+
+    // 先保留本機備份，避免網路中斷時資料消失
+    localStorage.setItem("mySchedule", JSON.stringify(localData));
+
+    if(!currentUser){
+      setSyncStatus("尚未登入，已暫存在此裝置。登入後即可雲端同步。");
+      if(showAlert) alert("目前尚未登入，課表已暫存在此裝置。\n登入 Google 後就能跨裝置同步。");
+      return;
+    }
+
+    setSyncStatus("☁️ 正在同步...");
+    const { error } = await supabaseClient
+      .from("schedules")
+      .upsert({
+        user_id: currentUser.id,
+        periods: localData.periods,
+        times: localData.times,
+        courses: localData.courses,
+        updated_at: new Date().toISOString()
+      }, { onConflict: "user_id" });
+
+    if(error){
+      console.error(error);
+      setSyncStatus("雲端同步失敗：" + error.message, true);
+      if(showAlert) alert("雲端同步失敗，已保留本機資料。");
+      return;
+    }
+
+    setSyncStatus("☁️ 已同步到雲端");
+    if(showAlert) alert("課表已同步到雲端 ✅");
+  }
+
+  function autoSave(){
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => saveSchedule(false), 500);
+  }
+
+  async function loadSchedule(){
+    // 先載入本機資料，讓原本的課表不會消失
+    const saved = localStorage.getItem("mySchedule");
+    if(saved){
+      try{
+        applyScheduleData(JSON.parse(saved));
+      }catch(e){
+        console.error("本機課表讀取失敗", e);
+      }
+    }
+
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    currentUser = session?.user || null;
+    updateAuthUI();
+
+    if(!currentUser){
+      if(!saved){
+        generatePeriods();
+      }
+      return;
+    }
+
+    await loadCloudSchedule();
+  }
+
+  async function loadCloudSchedule(){
+    if(!currentUser) return;
+
+    setSyncStatus("☁️ 正在讀取雲端課表...");
+
+    const { data, error } = await supabaseClient
+      .from("schedules")
+      .select("periods,times,courses")
+      .eq("user_id", currentUser.id)
+      .maybeSingle();
+
+    if(error){
+      console.error(error);
+      setSyncStatus("讀取雲端課表失敗：" + error.message, true);
+      return;
+    }
+
+    if(data){
+      applyScheduleData(data);
+      localStorage.setItem("mySchedule", JSON.stringify(getScheduleData()));
+      setSyncStatus("☁️ 已載入雲端課表");
+      return;
+    }
+
+    // 第一次登入：如果這台裝置原本有課表，就自動搬到雲端
+    const localSaved = localStorage.getItem("mySchedule");
+    if(localSaved){
+      try{
+        const localData = JSON.parse(localSaved);
+        applyScheduleData(localData);
+        await saveSchedule(false);
+        setSyncStatus("☁️ 已將這台裝置的課表搬到雲端");
+        return;
+      }catch(e){
+        console.error(e);
+      }
+    }
+
+    if(periods.length === 0){
+      generatePeriods();
+    }
+    await saveSchedule(false);
+    setSyncStatus("☁️ 已建立新的雲端課表");
+  }
+
+  supabaseClient.auth.onAuthStateChange(async (_event, session) => {
+    currentUser = session?.user || null;
+    updateAuthUI();
+
+    if(currentUser){
+      // OAuth 回來後讀取雲端
+      setTimeout(() => loadCloudSchedule(), 0);
+    }else{
+      setSyncStatus("已登出。");
+    }
+  });
+
+  async function downloadPDF(){
+    const container=document.getElementById('scheduleContainer');
+    const canvas=await html2canvas(container);
+    const imgData=canvas.toDataURL('image/png');
+    const { jsPDF }=window.jspdf;
+    const pdf=new jsPDF('l','pt','a4');
+    const imgProps=pdf.getImageProperties(imgData);
+    const pdfWidth=pdf.internal.pageSize.getWidth();
+    const pdfHeight=(imgProps.height*pdfWidth)/imgProps.width;
+    pdf.addImage(imgData,'PNG',0,0,pdfWidth,pdfHeight);
+    pdf.save('我的課表.pdf');
+  }
+
+  async function downloadImage(){
+    const container=document.getElementById('scheduleContainer');
+    const canvas=await html2canvas(container);
+    const imgData=canvas.toDataURL('image/png');
+    const link=document.createElement('a');
+    link.href=imgData;
+    link.download='我的課表.png';
+    link.click();
+  }
+
+  // 顏色選擇器控制
+  function openColorModal(){
+    document.getElementById("colorModal").classList.remove("hidden");
+    colorPicker.color.set(document.getElementById("colorHex").value || "#a0e7e5");
+  }
+  function closeColorModal(){
+    document.getElementById("colorModal").classList.add("hidden");
+    const c=colorPicker.color.hexString;
+    document.getElementById("colorHex").value=c;
+    document.getElementById("colorPreview").style.background=c;
+  }
+
+  window.onload=()=>{
+    colorPicker=new iro.ColorPicker("#colorPicker",{
+      width:250,
+      layout:[
+        { component: iro.ui.Box },
+        { component: iro.ui.Slider, options:{sliderType:"hue"} }
+      ],
+      color:"#a0e7e5"
+    });
+    colorPicker.on("color:change",c=>{
+      document.getElementById("colorHex").value=c.hexString;
+      document.getElementById("colorPreview").style.background=c.hexString;
+    });
+    document.getElementById("colorHex").addEventListener("input",e=>{
+      try{colorPicker.color.set(e.target.value);}catch{}
+    });
+    document.getElementById("colorPreview").addEventListener("click",openColorModal);
+    loadSchedule();
+  };
+
+  function addRecentColor(color){
+    if(!recentColors.includes(color)){
+      recentColors.unshift(color);
+      if(recentColors.length>5) recentColors.pop();
+      renderRecentColors();
+    }
+  }
+
+  function renderRecentColors(){
+    const container=document.getElementById("recentColors");
+    container.innerHTML="";
+    recentColors.forEach(c=>{
+      const div=document.createElement("div");
+      div.className="w-6 h-6 rounded cursor-pointer border";
+      div.style.background=c;
+      div.onclick=()=>{
+        document.getElementById("colorHex").value=c;
+        document.getElementById("colorPreview").style.background=c;
+        colorPicker.color.set(c);
+      };
+      container.appendChild(div);
+    });
+  }
+
+  function getRandomColor(){
+    const colors=["#a0e7e5","#b4f8c8","#fbe7c6","#ffaeae","#cbaacb"];
+    return colors[Math.floor(Math.random()*colors.length)];
+  }
+</script>
+</body>
+</html>
