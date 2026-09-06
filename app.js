@@ -1,0 +1,523 @@
+const days = ["一","二","三","四","五"];
+  let periods = [];
+  let times = [];
+  let courses = [];
+  let editCourseIndex = null;
+  let colorPicker, recentColors = [];
+
+  function renderPeriodSummary(){
+    const summary = document.getElementById("periodSummary");
+    summary.textContent = periods.length ? `目前 ${periods.length} 個節次` : "尚未設定節次";
+  }
+
+  function openPeriodModal(){
+    const editor = document.getElementById("periodEditor");
+    editor.innerHTML = "";
+
+    if(periods.length === 0){
+      const defaults = [
+        ["第1節","08:10-08:50"],
+        ["第2節","09:10-09:50"],
+        ["第3節","10:10-10:50"],
+        ["第4節","11:10-12:00"],
+        ["第20節","12:00-12:10"],
+        ["第5節","12:50-13:40"],
+        ["第6節","13:50-14:40"],
+        ["第7節","14:50-15:40"],
+        ["第8節","15:50-16:40"]
+      ];
+      defaults.forEach(([name,time]) => addPeriodRow(name,time));
+    }else{
+      periods.forEach((period,i) => addPeriodRow(period, times[i] || ""));
+    }
+
+    document.getElementById("periodModal").classList.remove("hidden");
+  }
+
+  function closePeriodModal(){
+    document.getElementById("periodModal").classList.add("hidden");
+  }
+
+  function addPeriodRow(name="", time=""){
+    const editor = document.getElementById("periodEditor");
+    const row = document.createElement("div");
+    row.className = "flex gap-2 items-center";
+    row.innerHTML = `
+      <input type="text" value="${escapeHtml(name)}" placeholder="節次，例如 第1節"
+        class="period-name border p-2 rounded flex-1 min-w-0" />
+      <input type="text" value="${escapeHtml(time)}" placeholder="時間，例如 08:10-08:50"
+        class="period-time border p-2 rounded flex-1 min-w-0" />
+      <button type="button" class="remove-period text-red-500 text-xl px-1" title="刪除">×</button>
+    `;
+    row.querySelector(".remove-period").onclick = () => row.remove();
+    editor.appendChild(row);
+  }
+
+  function escapeHtml(value){
+    return String(value ?? "")
+      .replace(/&/g,"&amp;").replace(/</g,"&lt;")
+      .replace(/>/g,"&gt;").replace(/"/g,"&quot;")
+      .replace(/'/g,"&#039;");
+  }
+
+  function savePeriodsFromModal(){
+    const rows = [...document.querySelectorAll("#periodEditor > div")];
+    const newPeriods = [];
+    const newTimes = [];
+
+    rows.forEach(row => {
+      const name = row.querySelector(".period-name").value.trim();
+      const time = row.querySelector(".period-time").value.trim();
+      if(name){
+        newPeriods.push(name);
+        newTimes.push(time);
+      }
+    });
+
+    if(!newPeriods.length){
+      alert("至少要設定一個節次。");
+      return;
+    }
+
+    periods = newPeriods;
+    times = newTimes;
+    closePeriodModal();
+    renderTable();
+    renderPeriodSummary();
+    autoSave();
+  }
+
+  // 保留舊函式名稱，避免舊程式呼叫時出錯
+  function generatePeriods(){
+    openPeriodModal();
+  }
+
+  function renderTable(){
+    const container = document.getElementById('scheduleContainer');
+    container.innerHTML='';
+    const table=document.createElement('table');
+    table.className='table-fixed border-collapse border border-gray-400 w-full text-center';
+
+    // 表頭
+    const thead=document.createElement('thead');
+    let headRow=document.createElement('tr');
+    headRow.innerHTML='<th class="border border-gray-400 p-2 w-24">節次/時間</th>';
+    days.forEach(day=>{
+      const th=document.createElement('th');
+      th.className='border border-gray-400 p-2';
+      th.textContent=`星期${day}`;
+      headRow.appendChild(th);
+    });
+    thead.appendChild(headRow);
+    table.appendChild(thead);
+
+    // 內容
+    const tbody=document.createElement('tbody');
+    periods.forEach((period,i)=>{
+      const row=document.createElement('tr');
+      const time=times[i];
+      const firstCell=document.createElement('td');
+      firstCell.className='border border-gray-400 p-2';
+      firstCell.innerHTML=`<div class='font-bold'>${period}</div><div>${time}</div>`;
+      row.appendChild(firstCell);
+
+      days.forEach(day=>{
+        const td=document.createElement('td');
+        td.className='border border-gray-400 align-middle h-24 cursor-pointer';
+
+        const course = courses.find(c =>
+          c.day === day &&
+          periods.indexOf(period) >= periods.indexOf(c.startPeriod) &&
+          periods.indexOf(period) <= periods.indexOf(c.endPeriod)
+        );
+
+        if(course){
+          td.style.backgroundColor=course.color;
+          td.innerHTML=`<div class='flex flex-col items-center justify-center h-full text-center'>
+            <div>${course.emoji} ${course.name}</div>
+            <div>${course.teacher}</div>
+            <div>${course.location}</div>
+          </div>`;
+        }
+
+        td.onclick = () => {
+          if(course){
+            editCourseIndex = courses.indexOf(course);
+            document.getElementById("deleteBtn").classList.remove("hidden");
+            openModal(course.day, course.startPeriod, course);
+          } else {
+            editCourseIndex = null;
+            document.getElementById("deleteBtn").classList.add("hidden");
+            openModal(day, period);
+          }
+        };
+
+        row.appendChild(td);
+      });
+      tbody.appendChild(row);
+    });
+    table.appendChild(tbody);
+    container.appendChild(table);
+
+    const daySelect=document.getElementById('courseDay');
+    const startSelect=document.getElementById('courseStart');
+    const endSelect=document.getElementById('courseEnd');
+    daySelect.innerHTML='';
+    startSelect.innerHTML='';
+    endSelect.innerHTML='';
+    days.forEach(day=>{ const opt=document.createElement('option'); opt.textContent=day; daySelect.appendChild(opt); });
+    periods.forEach(p=>{
+      let opt1=document.createElement('option'); opt1.textContent=p; startSelect.appendChild(opt1);
+      let opt2=document.createElement('option'); opt2.textContent=p; endSelect.appendChild(opt2);
+    });
+  }
+
+  function openModal(day, period, course=null){
+    document.getElementById('courseModal').classList.remove('hidden');
+    document.getElementById('modalTitle').textContent = course ? "編輯課程" : "新增課程";
+
+    if(course){
+      document.getElementById('courseEmoji').value=course.emoji;
+      document.getElementById('courseName').value=course.name;
+      document.getElementById('courseTeacher').value=course.teacher;
+      document.getElementById('courseLocation').value=course.location;
+      document.getElementById('courseDay').value=course.day;
+      document.getElementById('courseStart').value=course.startPeriod;
+      document.getElementById('courseEnd').value=course.endPeriod;
+      document.getElementById('colorPreview').style.background=course.color;
+      document.getElementById('colorHex').value=course.color;
+    } else {
+      document.getElementById('courseEmoji').value='';
+      document.getElementById('courseName').value='';
+      document.getElementById('courseTeacher').value='';
+      document.getElementById('courseLocation').value='';
+      document.getElementById('courseDay').value=day;
+      document.getElementById('courseStart').value=period;
+      document.getElementById('courseEnd').value=period;
+      const randColor=getRandomColor();
+      document.getElementById('colorPreview').style.background=randColor;
+      document.getElementById('colorHex').value=randColor;
+    }
+  }
+
+  function closeModal(){
+    document.getElementById('courseModal').classList.add('hidden');
+  }
+
+  function saveCourse(){
+    const emoji=document.getElementById('courseEmoji').value.trim();
+    const name=document.getElementById('courseName').value.trim();
+    const teacher=document.getElementById('courseTeacher').value.trim();
+    const location=document.getElementById('courseLocation').value.trim();
+    const day=document.getElementById('courseDay').value;
+    const start=document.getElementById('courseStart').value;
+    const end=document.getElementById('courseEnd').value;
+    const color=document.getElementById('colorHex').value;
+
+    if(!name) return;
+
+    const courseData={emoji,name,teacher,location,day,startPeriod:start,endPeriod:end,color};
+
+    if(editCourseIndex!==null){
+      courses[editCourseIndex]=courseData;
+    } else {
+      courses.push(courseData);
+    }
+
+    addRecentColor(color);
+    closeModal();
+    renderTable();
+    autoSave();
+  }
+
+  function deleteCourseInModal(){
+    if(editCourseIndex!==null){
+      courses.splice(editCourseIndex,1);
+      editCourseIndex=null;
+      closeModal();
+      renderTable();
+      autoSave();
+    }
+  }
+
+  // =========================
+  // Supabase 雲端同步設定
+  // =========================
+  const SUPABASE_URL = "https://vktuigxxlciclhvpxdjj.supabase.co";
+  const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_mFPESpcqb220DML18yLeYw_HrRXeuqg";
+  const supabaseClient = window.supabase.createClient(
+    SUPABASE_URL,
+    SUPABASE_PUBLISHABLE_KEY
+  );
+
+  let currentUser = null;
+  let saveTimer = null;
+
+  function setSyncStatus(message, isError=false){
+    const el = document.getElementById("syncStatus");
+    el.textContent = message;
+    el.className = "text-sm mt-2 " + (isError ? "text-red-500" : "text-gray-500");
+  }
+
+  function updateAuthUI(){
+    const status = document.getElementById("authStatus");
+    const login = document.getElementById("loginBtn");
+    const logoutBtn = document.getElementById("logoutBtn");
+
+    if(currentUser){
+      status.textContent = "☁️ 已登入：" + (currentUser.email || "Google 帳號");
+      login.classList.add("hidden");
+      logoutBtn.classList.remove("hidden");
+    }else{
+      status.textContent = "☁️ 尚未登入";
+      login.classList.remove("hidden");
+      logoutBtn.classList.add("hidden");
+    }
+  }
+
+  async function loginWithGoogle(){
+    setSyncStatus("正在開啟 Google 登入...");
+    const { error } = await supabaseClient.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: window.location.origin + window.location.pathname
+      }
+    });
+    if(error){
+      console.error(error);
+      setSyncStatus("登入失敗：" + error.message, true);
+    }
+  }
+
+  async function logout(){
+    const { error } = await supabaseClient.auth.signOut();
+    if(error){
+      setSyncStatus("登出失敗：" + error.message, true);
+      return;
+    }
+    currentUser = null;
+    updateAuthUI();
+    setSyncStatus("已登出。");
+  }
+
+  function getScheduleData(){
+    return {
+      periods: periods || [],
+      times: times || [],
+      courses: courses || []
+    };
+  }
+
+  function applyScheduleData(data){
+    periods = Array.isArray(data?.periods) ? data.periods : [];
+    times = Array.isArray(data?.times) ? data.times : [];
+    courses = Array.isArray(data?.courses) ? data.courses : [];
+    renderTable();
+    renderPeriodSummary();
+
+  }
+
+  async function saveSchedule(showAlert=true){
+    const localData = getScheduleData();
+
+    // 先保留本機備份，避免網路中斷時資料消失
+    localStorage.setItem("mySchedule", JSON.stringify(localData));
+
+    if(!currentUser){
+      setSyncStatus("尚未登入，已暫存在此裝置。登入後即可雲端同步。");
+      if(showAlert) alert("目前尚未登入，課表已暫存在此裝置。\n登入 Google 後就能跨裝置同步。");
+      return;
+    }
+
+    setSyncStatus("☁️ 正在同步...");
+    const { error } = await supabaseClient
+      .from("schedules")
+      .upsert({
+        user_id: currentUser.id,
+        periods: localData.periods,
+        times: localData.times,
+        courses: localData.courses,
+        updated_at: new Date().toISOString()
+      }, { onConflict: "user_id" });
+
+    if(error){
+      console.error(error);
+      setSyncStatus("雲端同步失敗：" + error.message, true);
+      if(showAlert) alert("雲端同步失敗，已保留本機資料。");
+      return;
+    }
+
+    setSyncStatus("☁️ 已同步到雲端");
+    if(showAlert) alert("課表已同步到雲端 ✅");
+  }
+
+  function autoSave(){
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => saveSchedule(false), 500);
+  }
+
+  async function loadSchedule(){
+    // 先載入本機資料，讓原本的課表不會消失
+    const saved = localStorage.getItem("mySchedule");
+    if(saved){
+      try{
+        applyScheduleData(JSON.parse(saved));
+      }catch(e){
+        console.error("本機課表讀取失敗", e);
+      }
+    }
+
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    currentUser = session?.user || null;
+    updateAuthUI();
+
+    if(!currentUser){
+      if(!saved){
+        generatePeriods();
+      }
+      return;
+    }
+
+    await loadCloudSchedule();
+  }
+
+  async function loadCloudSchedule(){
+    if(!currentUser) return;
+
+    setSyncStatus("☁️ 正在讀取雲端課表...");
+
+    const { data, error } = await supabaseClient
+      .from("schedules")
+      .select("periods,times,courses")
+      .eq("user_id", currentUser.id)
+      .maybeSingle();
+
+    if(error){
+      console.error(error);
+      setSyncStatus("讀取雲端課表失敗：" + error.message, true);
+      return;
+    }
+
+    if(data){
+      applyScheduleData(data);
+      localStorage.setItem("mySchedule", JSON.stringify(getScheduleData()));
+      setSyncStatus("☁️ 已載入雲端課表");
+      return;
+    }
+
+    // 第一次登入：如果這台裝置原本有課表，就自動搬到雲端
+    const localSaved = localStorage.getItem("mySchedule");
+    if(localSaved){
+      try{
+        const localData = JSON.parse(localSaved);
+        applyScheduleData(localData);
+        await saveSchedule(false);
+        setSyncStatus("☁️ 已將這台裝置的課表搬到雲端");
+        return;
+      }catch(e){
+        console.error(e);
+      }
+    }
+
+    if(periods.length === 0){
+      generatePeriods();
+    }
+    await saveSchedule(false);
+    setSyncStatus("☁️ 已建立新的雲端課表");
+  }
+
+  supabaseClient.auth.onAuthStateChange(async (_event, session) => {
+    currentUser = session?.user || null;
+    updateAuthUI();
+
+    if(currentUser){
+      // OAuth 回來後讀取雲端
+      setTimeout(() => loadCloudSchedule(), 0);
+    }else{
+      setSyncStatus("已登出。");
+    }
+  });
+
+  async function downloadPDF(){
+    const container=document.getElementById('scheduleContainer');
+    const canvas=await html2canvas(container);
+    const imgData=canvas.toDataURL('image/png');
+    const { jsPDF }=window.jspdf;
+    const pdf=new jsPDF('l','pt','a4');
+    const imgProps=pdf.getImageProperties(imgData);
+    const pdfWidth=pdf.internal.pageSize.getWidth();
+    const pdfHeight=(imgProps.height*pdfWidth)/imgProps.width;
+    pdf.addImage(imgData,'PNG',0,0,pdfWidth,pdfHeight);
+    pdf.save('我的課表.pdf');
+  }
+
+  async function downloadImage(){
+    const container=document.getElementById('scheduleContainer');
+    const canvas=await html2canvas(container);
+    const imgData=canvas.toDataURL('image/png');
+    const link=document.createElement('a');
+    link.href=imgData;
+    link.download='我的課表.png';
+    link.click();
+  }
+
+  // 顏色選擇器控制
+  function openColorModal(){
+    document.getElementById("colorModal").classList.remove("hidden");
+    colorPicker.color.set(document.getElementById("colorHex").value || "#a0e7e5");
+  }
+  function closeColorModal(){
+    document.getElementById("colorModal").classList.add("hidden");
+    const c=colorPicker.color.hexString;
+    document.getElementById("colorHex").value=c;
+    document.getElementById("colorPreview").style.background=c;
+  }
+
+  window.onload=()=>{
+    colorPicker=new iro.ColorPicker("#colorPicker",{
+      width:250,
+      layout:[
+        { component: iro.ui.Box },
+        { component: iro.ui.Slider, options:{sliderType:"hue"} }
+      ],
+      color:"#a0e7e5"
+    });
+    colorPicker.on("color:change",c=>{
+      document.getElementById("colorHex").value=c.hexString;
+      document.getElementById("colorPreview").style.background=c.hexString;
+    });
+    document.getElementById("colorHex").addEventListener("input",e=>{
+      try{colorPicker.color.set(e.target.value);}catch{}
+    });
+    document.getElementById("colorPreview").addEventListener("click",openColorModal);
+    loadSchedule();
+  };
+
+  function addRecentColor(color){
+    if(!recentColors.includes(color)){
+      recentColors.unshift(color);
+      if(recentColors.length>5) recentColors.pop();
+      renderRecentColors();
+    }
+  }
+
+  function renderRecentColors(){
+    const container=document.getElementById("recentColors");
+    container.innerHTML="";
+    recentColors.forEach(c=>{
+      const div=document.createElement("div");
+      div.className="w-6 h-6 rounded cursor-pointer border";
+      div.style.background=c;
+      div.onclick=()=>{
+        document.getElementById("colorHex").value=c;
+        document.getElementById("colorPreview").style.background=c;
+        colorPicker.color.set(c);
+      };
+      container.appendChild(div);
+    });
+  }
+
+  function getRandomColor(){
+    const colors=["#a0e7e5","#b4f8c8","#fbe7c6","#ffaeae","#cbaacb"];
+    return colors[Math.floor(Math.random()*colors.length)];
+  }
