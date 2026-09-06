@@ -70,7 +70,10 @@
     #scheduleContainer td:not(:first-child) > div > div:nth-child(3){font-size:12px;color:#969ca7}
 
     .modal-backdrop{background:rgba(35,39,50,.38)!important;backdrop-filter:blur(4px)}
-    .modal-box{border-radius:22px!important;border:1px solid rgba(255,255,255,.9);box-shadow:0 25px 70px rgba(30,35,50,.18);padding:23px!important}
+    .modal-box{border-radius:22px!important;border:1px solid rgba(255,255,255,.9);box-shadow:0 25px 70px rgba(30,35,50,.18);padding:23px!important;max-height:calc(100vh - 32px);overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+    #courseModal .modal-box{width:min(92vw,420px)!important;max-height:calc(100vh - 32px);overflow-y:auto}
+    #periodModal .modal-box{max-height:calc(100vh - 32px);overflow-y:auto}
+    .modal-backdrop{overflow-y:auto;-webkit-overflow-scrolling:touch}
     .modal-title{color:#373c47}
     .field{border:1px solid #e4e6ec!important;border-radius:11px!important;padding:10px 12px!important;outline:none;transition:.15s;border-width:1px!important}
     .field:focus{border-color:#aab5ee!important;box-shadow:0 0 0 3px #eef0ff}
@@ -82,15 +85,138 @@
     .modal-actions{border-top:1px solid #f0f1f4;padding-top:14px}
     .color-preview{border:3px solid white!important;box-shadow:0 2px 10px rgba(50,60,80,.12)}
     .footer-note{text-align:center;color:#b0b4bd;font-size:12px;margin-top:18px}
+    .mobile-swipe-hint{display:none;text-align:center;color:#a4a9b4;font-size:10px;padding:7px 0 1px}
+
+    /* ===== 多裝置響應式介面 ===== */
+    .device-layout-note{display:none}
+    @media (min-width: 1200px){
+      .page{max-width:1280px;padding-left:28px;padding-right:28px}
+      #scheduleContainer table{min-width:900px}
+      #scheduleContainer th{padding:14px 12px!important}
+      #scheduleContainer td{height:104px}
+    }
+    @media (min-width: 641px) and (max-width: 1024px){
+      .page{padding:28px 16px 46px}
+      h1{font-size:30px!important}
+      .sync-card{padding:16px}
+      .toolbar{gap:10px}
+      .toolbar-left,.toolbar-right{gap:7px}
+      .schedule-card{padding:10px}
+      #scheduleContainer{overflow-x:auto;-webkit-overflow-scrolling:touch}
+      #scheduleContainer table{min-width:800px;width:100%}
+      #scheduleContainer th{padding:12px 8px!important}
+      #scheduleContainer td{height:94px}
+    }
+    @media (max-width: 640px){
+      /* 手機：避免桌面版內容被壓縮，課表改成可左右滑動 */
+      .page{max-width:none}
+      .hero{padding:0 4px}
+      .sync-card{box-shadow:0 8px 24px rgba(55,65,81,.06)}
+      .toolbar{position:relative}
+      .schedule-card{width:100%;}
+      #scheduleContainer{scrollbar-width:thin}
+      #scheduleContainer table{table-layout:fixed!important}
+      #scheduleContainer th:not(:first-child),
+      #scheduleContainer td:not(:first-child){width:107px!important;min-width:107px!important}
+      #scheduleContainer th:first-child,
+      #scheduleContainer td:first-child{width:72px!important;min-width:72px!important}
+      #scheduleContainer td{height:84px!important}
+      /* 手機表單：輸入框與按鈕更容易點 */
+      .period-row{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 34px!important;align-items:center}
+      .period-row .remove-period{width:34px;height:40px}
+    }
+    @media (max-width: 480px){
+      .page{padding:14px 8px 28px}
+      h1{font-size:23px!important}
+      .subtitle{font-size:11px}
+      .hero-badge{font-size:10px}
+      .sync-card{padding:11px}
+      .toolbar-right .btn{min-height:40px}
+      .schedule-card{padding:5px}
+      #scheduleContainer table{min-width:607px!important;width:607px!important}
+      #scheduleContainer th:not(:first-child),#scheduleContainer td:not(:first-child){width:107px!important;min-width:107px!important}
+      #scheduleContainer th:first-child,#scheduleContainer td:first-child{width:72px!important;min-width:72px!important}
+      #scheduleContainer th{font-size:11px;padding:9px 4px!important}
+      #scheduleContainer td > div{padding:2px!important}
+      .modal-box{padding:16px!important}
+    }
+    @media (max-width: 360px){
+      h1{font-size:21px!important}
+      .btn{font-size:11px!important}
+      #scheduleContainer table{min-width:577px!important;width:577px!important}
+      #scheduleContainer th:not(:first-child),#scheduleContainer td:not(:first-child){width:101px!important;min-width:101px!important}
+      #scheduleContainer th:first-child,#scheduleContainer td:first-child{width:72px!important;min-width:72px!important}
+    }
+    @media (hover:none) and (pointer:coarse){
+      #scheduleContainer td:hover{transform:none!important;box-shadow:inset 0 0 0 1px #edf0f4!important}
+      .btn:hover{transform:none;filter:none}
+      #scheduleContainer td{cursor:pointer}
+    }
+    /* 手機版：以手機 App 的閱讀方式呈現 */
     @media(max-width:640px){
-      .page{padding:25px 12px 45px}
-      h1{font-size:28px!important}
-      .sync-card{padding:15px}
-      .schedule-card{padding:8px}
-      #scheduleContainer table{min-width:700px;border-spacing:4px!important}
-      .toolbar{align-items:stretch}
-      .toolbar-left,.toolbar-right{width:100%}
-      .toolbar .btn{flex:1}
+      body{font-size:14px;overflow-x:hidden}
+      .page{width:100%;padding:18px 10px 34px}
+      .hero{margin-bottom:16px}
+      .hero-badge{font-size:11px;padding:6px 11px;margin-bottom:8px}
+      h1{font-size:25px!important}
+      .subtitle{font-size:12px;margin-top:6px}
+
+      .card{border-radius:18px}
+      .sync-card{padding:13px;margin-bottom:12px}
+      .sync-row{gap:11px}
+      .status-wrap{width:100%}
+      #authStatus{font-size:13px!important}
+      #syncStatus{font-size:11px!important;margin-top:4px!important}
+      .sync-card .toolbar-right{width:100%}
+      .sync-card .btn{width:100%}
+
+      /* 工具列改成手機兩列 */
+      .toolbar{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+      .toolbar-left,.toolbar-right{width:100%;display:contents}
+      .toolbar-left .btn{grid-column:1 / -1}
+      #periodSummary{grid-column:1 / -1;margin:0!important;text-align:center;font-size:11px}
+      .toolbar-right .btn{width:100%;min-width:0}
+      .toolbar-right .btn:first-child{grid-column:1}
+      .toolbar-right .btn:nth-child(2){grid-column:2}
+      .toolbar-right .btn:nth-child(3){grid-column:1 / -1}
+      .btn{min-height:42px;padding:9px 10px!important;font-size:13px!important}
+
+      .schedule-card{padding:7px;border-radius:18px}
+      .mobile-swipe-hint{display:block}
+      #scheduleContainer{overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;border-radius:13px;padding-bottom:3px}
+      #scheduleContainer table{min-width:610px!important;width:610px!important;border-spacing:3px!important}
+      #scheduleContainer th{font-size:12px;padding:10px 5px!important;position:sticky;top:0;z-index:2}
+      #scheduleContainer th:first-child{width:72px;min-width:72px}
+      #scheduleContainer td{height:82px;min-height:82px;border-radius:10px!important}
+      #scheduleContainer td:first-child{width:72px;min-width:72px;position:sticky;left:0;z-index:1;background:#f8f9fb!important;box-shadow:3px 0 8px rgba(70,80,100,.07)!important}
+      #scheduleContainer td > div{padding:3px!important;line-height:1.35}
+      #scheduleContainer td:not(:first-child) > div > div:first-child{font-size:12px}
+      #scheduleContainer td:not(:first-child) > div > div:nth-child(2),
+      #scheduleContainer td:not(:first-child) > div > div:nth-child(3){font-size:10px;margin-top:1px}
+      #scheduleContainer td:not(:first-child) > div > div:first-child:first-letter{font-size:13px}
+
+      .footer-note{font-size:10px;margin-top:12px}
+
+      /* 手機上的兩個設定視窗改為接近全螢幕 */
+      .modal-backdrop{padding:10px!important;align-items:flex-end!important}
+      .modal-box{width:100%!important;max-width:none!important;border-radius:20px 20px 12px 12px!important;padding:18px!important;max-height:calc(100vh - 20px)!important;overflow-y:auto!important}
+      #courseModal .modal-box{max-height:calc(100vh - 20px)!important;overflow-y:auto!important}
+      #courseModal .flex.flex-col{gap:9px!important}
+      .field{min-height:43px;font-size:14px!important}
+      .modal-actions{position:sticky;bottom:0;background:rgba(255,255,255,.96);margin-left:-18px;margin-right:-18px;margin-bottom:-18px;padding:12px 18px 18px;z-index:2;backdrop-filter:blur(8px)}
+      #colorModal .modal-box{width:auto!important;max-width:330px!important;align-self:center!important}
+      #colorPicker{max-width:100%}
+
+      /* 節次編輯列在手機上改成較容易點擊的版型 */
+      .period-row{padding:7px!important;gap:5px!important}
+      .period-row input{min-height:40px!important;font-size:13px!important}
+    }
+
+    @media(max-width:380px){
+      .page{padding-left:7px;padding-right:7px}
+      #scheduleContainer table{min-width:570px!important;width:570px!important}
+      #scheduleContainer th:first-child,#scheduleContainer td:first-child{width:66px;min-width:66px}
+      .btn{font-size:12px!important}
     }
   </style>
 </head>
@@ -132,6 +258,7 @@
 
     <section class="card schedule-card">
       <div id="scheduleContainer"></div>
+      <div class="mobile-swipe-hint">← 左右滑動查看完整課表 →</div>
     </section>
 
     <div class="footer-note">點一下課表格子，就可以新增或編輯課程 ✦</div>
