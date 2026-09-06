@@ -135,7 +135,8 @@ const days = ["一","二","三","四","五"];
         );
 
         if(course){
-          td.style.backgroundColor=course.color || '#a0e7e5';
+          td.classList.add('course-cell');
+          td.style.setProperty('--course-color', course.color || '#a0e7e5');
           td.innerHTML=`<div class='flex flex-col items-center justify-center h-full text-center'>
             <div>${course.emoji} ${course.name}</div>
             <div>${course.teacher}</div>
@@ -532,8 +533,8 @@ const days = ["一","二","三","四","五"];
       roundRectPath(ctx,outerPad,y,firstCol,rowH,13);
       ctx.fillStyle='#f8f9fb';
       ctx.fill();
-      drawCenteredText(ctx,period,outerPad+firstCol/2,y+rowH/2-10,firstCol-12,16,'700','#626976');
-      drawCenteredText(ctx,time,outerPad+firstCol/2,y+rowH/2+18,firstCol-12,15,'400','#6d7583');
+      drawCenteredText(ctx,period,outerPad+firstCol/2,y+rowH/2-15,firstCol-12,16,'700','#626976');
+      drawCenteredText(ctx,time,outerPad+firstCol/2,y+rowH/2+15,firstCol-12,15,'400','#6d7583');
 
       days.forEach((day,j)=>{
         const x=outerPad+firstCol+gap+j*(dayCol+gap);
@@ -554,9 +555,9 @@ const days = ["一","二","三","四","五"];
         if(course){
           const centerX=x+dayCol/2;
           const maxText=dayCol-28;
-          drawCenteredText(ctx,`${course.emoji || ''} ${course.name || ''}`.trim(),centerX,y+rowH/2-19,maxText,17,'700','#454b56');
+          drawCenteredText(ctx,`${course.emoji || ''} ${course.name || ''}`.trim(),centerX,y+rowH/2-18,maxText,17,'700','#454b56');
           drawCenteredText(ctx,course.teacher || '',centerX,y+rowH/2+7,maxText,14,'400','#727987');
-          drawCenteredText(ctx,course.location || '',centerX,y+rowH/2+29,maxText,14,'400','#969ca7');
+          drawCenteredText(ctx,course.location || '',centerX,y+rowH/2+32,maxText,14,'400','#969ca7');
         }
       });
     });
